@@ -1,10 +1,22 @@
 import os
 import sys
 import nltk
-from nltk import tree2conlltags
+import spacy
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
-
+nlp = spacy.load('en_core_web_sm')
+from nltk.corpus import stopwords
+import codecs
+import gensim
+from  gensim import corpora
+from collections import defaultdict
+# from nltk import tree2conlltags
+# import numpy as np
+# import pandas as pd
+# from gensim import model
+# from sklearn.feature_extraction.text import TfidfVectorizer
+# from sklearn.cluster import KMeans
+# nltk.download('stopwords')
 # nltk.download('treebank')
 # nltk.download('maxent_ne_chunker')
 # nltk.download('words')
@@ -64,20 +76,21 @@ def get_wordnet_pos(treebank_tag):
     else:
         return wordnet.NOUN
 
-#Tokenization
-def tokenization(files):
+
+def tokenization(corpus):
     token_dict = {}
-    for file in files:
-        f = open(file, "r", encoding='utf-8')
-        # sentence = "In 2017 Amazon acquired Whole Foods Market for US$13.4 billion, which vastly increased Amazon's presence as a brick and-mortar retailer."
-        if f.mode == 'r':
-            text = f.read()
-            token_text = nltk.sent_tokenize(text)
-            for sentence in token_text:
-                word_token = nltk.word_tokenize(sentence)
-                token_dict[sentence] = word_token
-            # token_dict[sentence] = nltk.word_tokenize("In 2017, Amazon acquired Whole Foods Market for US$13.4 billion, which vastly increased Amazon's presence as a brickand-mortar retailer.")
-    return token_dict
+    filtered_corpus = []
+    stop_words = set(stopwords.words('english'))
+    sentences = nltk.sent_tokenize(corpus)
+    for sentence in sentences:
+        word_token = nltk.word_tokenize(sentence)
+        filtered_sentece = []
+        for w in word_token:
+            if w not in stop_words:
+                filtered_sentece.append(w)
+        filtered_corpus.append(filtered_sentece)
+        token_dict[sentence] = word_token
+    return token_dict, filtered_corpus
 
 #POS Tagging
 def pos_tagging(token_dict):
@@ -100,31 +113,48 @@ def lemmatization(pos_tag_dict):
 
 def chunking(pos_tag_dict):
     grammar = r"""
-        NP: {<DT>?<JJ>*<NN>}
+        NP: { < DT | JJ | NN. * > +}  # Chunk sequences of DT, JJ, NN
+        PP: { < IN > < NP >}  # Chunk prepositions followed by NP
+        VP: { < VB. * > < NP | PP | CLAUSE > +$}  # Chunk verbs and their arguments
       """
-    # NP: { < DT | JJ | NN. * > +}  # Chunk sequences of DT, JJ, NN
-    # PP: { < IN > < NP >}  # Chunk prepositions followed by NP
-    # VP: { < VB. * > < NP | PP | CLAUSE > +$}  # Chunk verbs and their arguments
     parse_dict = {}
     cp = nltk.RegexpParser(grammar)
     for sentence, pos_tag_sentence in pos_tag_dict.items():
-        non_iob = cp.parse(pos_tag_sentence)
-        parse_dict[sentence] = tree2conlltags(non_iob)
+        parse_dict[sentence] = cp.parse(pos_tag_sentence)
+        # parse_dict[sentence] = tree2conlltags(non_iob)
     return parse_dict
 
 def named_entity_recognition(parse_dict):
-    ner_dict = {}
+    ner_dict = defaultdict(list)
     for sentence, parse_tree in parse_dict.items():
-      ner_dict[sentence] = nltk.ne_chunk(parse_tree)
+      # ner_dict[sentence] = nltk.ne_chunk(parse_tree)
+        doc = nlp(sentence)
+        for tuple in doc.ents:
+            ner_dict[sentence].append([tuple.text, tuple.label_])
     return ner_dict
 
-def find_synonyms(parse_dict):
-    for key, parse_tree in parse_dict.items():
-        synset_dict = {}
-        for subtree in parse_tree:
-            if subtree[1].startswith('VB'):
-                synset_dict[subtree[0]] = wordnet.synsets(subtree[0])
-    return synset_dict
+def stemming(token_dict):
+    stemmer = nltk.stem.PorterStemmer()
+    stem_dict = {}
+    for sentence in token_dict.keys():
+         stems = " "
+         token_list = token_dict[sentence]
+         for token in token_list:
+             stem =  " "+stemmer.stem(token)
+             stems += stem
+         stem_dict[sentence] = stems
+    return stem_dict
+
+def create_bag_of_words(filtered_corpus):
+    bag_of_words = {}
+    for sentence in filtered_corpus:
+        for word in sentence:
+            if word in bag_of_words.keys():
+                bag_of_words[word] += 1
+            else:
+                bag_of_words[word] = 1
+    return bag_of_words
+
 
 if __name__ == "__main__":
     training_data_folder = sys.argv[1];
@@ -132,13 +162,30 @@ if __name__ == "__main__":
     for entry in os.listdir(training_data_folder):
         if os.path.isfile(os.path.join(training_data_folder, entry)):
             files.append(os.path.join(training_data_folder, entry))
-    token_dict = tokenization(files)
+    corpus_raw = u""
+    for file in files:
+        with codecs.open(file, "r" , "utf-8") as text:
+            corpus_raw += text.read()
+
+    token_dict, filtered_corpus = tokenization(corpus_raw)
     pos_tag_dict = pos_tagging(token_dict)
     lemma_dict = lemmatization(pos_tag_dict)
+    stem_dict = stemming(token_dict)
     parse_dict = chunking(pos_tag_dict)
-    synonym_dict = find_synonyms(parse_dict)
+    bag_of_words = create_bag_of_words(filtered_corpus)
     ner_dict = named_entity_recognition(parse_dict)
-
+    # dictionary = gensim.corpora.Dictionary(filtered_corpus)
+    # dictionary.filter_extremes(no_below=5,no_above=0.8)
+    # bag_of_words = [dictionary.doc2bow(sentence) for sentence in filtered_corpus]
+    # tfidf = models.TfidfModel(bag_of_words)
+    # corpus_tfidf = tfidf[bag_of_words]
+    # tfidf = TfidfVectorizer(min_df=2,max_df=0.5, ngram_range=(1,2))
+    # features = tfidf.fit_transform(filtered_corpus)
+    # pd.DataFrame(features.todense(),columns=tfidf.get_feature_names())
+    # lda_model = gensim.models.LdaMulticore(bag_of_words,num_topics=3,id2word=dictionary,passes=2)
+    # for ids,topic in lda_model.print_topics(-1):
+    #     print("Topic: {} words: {}".format(ids,topic) )
+    #     print("\n")
 
 
 
