@@ -140,13 +140,6 @@ if __name__ == "__main__":
         if doc:
             corpus.append(doc)
 
-    #  Pinting lemma of  verbs in the corpus
-    i = 0
-    for key, value in sentence_lemma.items():
-        if i < 40:
-            i += 1
-            print(key, value)
-
     # Build the bigram and trigram models
     bigram = gensim.models.Phrases(corpus, min_count=5, threshold=100)  # higher threshold fewer phrases.
     trigram = gensim.models.Phrases(bigram[corpus], threshold=100)
@@ -157,6 +150,14 @@ if __name__ == "__main__":
 
     # See trigram example
     print(trigram_mod[bigram_mod[corpus[0]]])
+
+    #  Pinting lemma of  verbs in the corpus
+    i = 0
+    for key, value in sentence_lemma.items():
+        if i < 40:
+            i += 1
+            print(key, value)
+
     # printing tokens in corpus
     i = 0
     for key, value in sentence_tokens.items():
