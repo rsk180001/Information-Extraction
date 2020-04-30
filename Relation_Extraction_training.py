@@ -3,12 +3,13 @@ import sys
 import nltk
 import spacy
 from nltk.corpus import wordnet
+from itertools import chain
 from nltk.stem import WordNetLemmatizer
 nlp = spacy.load('en_core_web_sm')
 from nltk.corpus import stopwords
 import codecs
-import gensim
-from  gensim import corpora
+#import gensim
+#from  gensim import corpora
 from collections import defaultdict
 # from nltk import tree2conlltags
 # import numpy as np
@@ -62,6 +63,31 @@ from collections import defaultdict
 # WRB	wh-abverb	where, when
 
 
+def find_synonyms(input):
+    verb_tags = ['VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ']
+    synonyms_dict = {}
+    hyponyms_dict = {}
+    hypernyms_dict = {}
+    for key in input:
+        for tag in input[key]:
+           if tag[1] in verb_tags:
+               for syn in wordnet.synsets(tag[0]):
+                   syno = []
+                   hypo = []
+                   hyper = []
+                   for l in syn.lemmas():
+                       syno.append(l.name())
+                   synonyms_dict[tag[0]] = syno
+                   for l in syn.hyponyms():
+                       for k in l.lemma_names():
+                           hypo.append(k)
+                   hyponyms_dict[tag[0]] = hypo
+                   for l in syn.hypernyms():
+                        for k in l.lemma_names():
+                            hyper.append(k)
+                   hypernyms_dict[tag[0]] = hyper
+    return synonyms_dict, hypernyms_dict, hyponyms_dict
+
 
 def get_wordnet_pos(treebank_tag):
 
@@ -101,7 +127,7 @@ def pos_tagging(token_dict):
         pos_tag_dict[key] = pos_tagged
     return pos_tag_dict
 
-#Lemmatize
+
 def lemmatization(pos_tag_dict):
     lemma_dict = {}
     lemmatizer = WordNetLemmatizer()
@@ -157,7 +183,7 @@ def create_bag_of_words(filtered_corpus):
 
 
 if __name__ == "__main__":
-    training_data_folder = sys.argv[1];
+    training_data_folder = sys.argv[1]
     files = []
     for entry in os.listdir(training_data_folder):
         if os.path.isfile(os.path.join(training_data_folder, entry)):
@@ -169,6 +195,7 @@ if __name__ == "__main__":
 
     token_dict, filtered_corpus = tokenization(corpus_raw)
     pos_tag_dict = pos_tagging(token_dict)
+    synonyms_dict, hypernyms_dict, hyponyms_dict = find_synonyms(pos_tag_dict)
     lemma_dict = lemmatization(pos_tag_dict)
     stem_dict = stemming(token_dict)
     parse_dict = chunking(pos_tag_dict)
