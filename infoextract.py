@@ -1,11 +1,11 @@
 import os
 import sys
-from pprint import pprint
+
 
 # nltk and spacy
 import nltk
 import spacy
-from spacy.pipeline import merge_entities
+
 from spacy.symbols import nsubj, VERB
 
 # gensim and codecs
@@ -13,13 +13,16 @@ import codecs
 import gensim
 from  gensim import corpora
 from gensim.models import CoherenceModel
+from spacy_wordnet.wordnet_annotator import WordnetAnnotator
 
 nlp = spacy.load('en_core_web_sm')
 nltk.download('punkt')
+nltk.download('wordnet')
 
 if __name__ == "__main__":
     files = []
     training_data_folder = sys.argv[1]
+    test_data_folder = sys.argv[2]
     for entry in os.listdir(training_data_folder):
         if os.path.isfile(os.path.join(training_data_folder, entry)):
             files.append(os.path.join(training_data_folder, entry))
@@ -32,77 +35,88 @@ if __name__ == "__main__":
     sentence_pos = {}
     sentence_lemma = {}
     sentence_NER = {}
+    nlp.add_pipe(WordnetAnnotator(nlp.lang), after='tagger')
 
-    # These rules reducing the data size too much
-
-    # def extract_person_orgs(doc):
-    #     person_entities = [ent for ent in doc.ents if ent.label_ == "PERSON"]
-    #     for ent in person_entities:
-    #         head = ent.root.head
-    #         if head.lemma_ in ["work","employment","run",
-    #                            "toil","function","operate",
-    #                             "perform","run","labor"]:
-    #             preps = [token for token in head.children if token.dep_ == "prep"]
-    #             for prep in preps:
-    #                 orgs = [token for token in prep.children if token.ent_type_ == "ORG"]
-    #                 if len(orgs) > 0:
-    #                     corpus.add(doc)
-    #                     break
-    #     return doc
-
-    # def extract_places(doc):
-    #   location_entities = [ent for ent in doc.ents if ent.label_.lower() in
-    #                      ["ORG","NORP","FAC","GPE", "LOC"]]
-    #   if len(location_entities) > 2:
-    #     for ent in location_entities:
-    #         head = ent.root.head
-    #         if head.lemma_ in ["be", "situate", "place", "locate"]:
-    #             corpus.add(doc)
-    #             break
-    #   return doc
-
-    # def extract_by_verb(doc):
-    #     for possible_subject in doc:
-    #         if possible_subject.dep == nsubj and possible_subject.head.pos == VERB and possible_subject.head.lemma_.lower() in ["buy","purchase","acquire"
-    #                                       ,"trade", "obtain", "get", "take", "sale"]:
-
-    #             corpus.add(doc)
-    #         if possible_subject.dep == nsubj and possible_subject.head.pos == VERB and possible_subject.head.lemma_.lower() in ["work","employment","run",
-    #                                                       "toil","function","operate",
-    #                                                       "perform","run","labor"]:
-
-    #             corpus.add(doc)
-    #         if possible_subject.dep == nsubj and possible_subject.head.pos == VERB and possible_subject.head.lemma_.lower() in ["located","situate","locate",
-    #                                                       "part"]:
-    #             corpus.add(doc)
-    #     return doc
 
     def extract_entities(doc):
-        for ent in doc.ents:
-            if ent.label_ == "ORG" or ent.label_ == "GPE" \
-                    or ent.label_ == "LOC" or ent.label_ == "PERSON":
-                head = ent.root.head;
-                if head.lemma_.lower() in ["work", "employment", "run", "employ", "purchaser"
-                                                                                  "toil", "function", "operate",
-                                           "perform", "run", "labor", "buy", "purchase", "acquire"
-                    , "trade", "obtain", "get", "take", "sale", "located",
-                                           "situate", "locate", "part", "locate", "founder", "lived"
-                                                                                             "headquarter", "serve"]:
+        ent_count = 0
+        entities = [ent for ent in doc.ents]
+        token_list = []
+        for token in doc:
+            token_list.append(token)
+        for ent in entities:
+            if ent.label_ == "PERSON":
+                for token in doc:
+                    head = ent.root.head
+                    if token.lemma_.lower() in ["work", "employment", "run",
+                                                "toil", "function", "operate",
+                                                "perform", "run", "labor", "employ", "founder",
+                                                "serve"]:
+                        # tokens = [token for token in head.children ]
+                        # for word in tokens:
+                        #   if word.ent_type_ in ["ORG","NORP","FAC","GPE"]:
+                        for ent in entities:
+                            if ent.label_.lower() in ["ORG", "NORP", "FAC", "GPE"]:
+                                return doc
+
+                    if head.lemma_ in ["work", "employment", "run",
+                                       "toil", "function", "operate",
+                                       "perform", "run", "labor"]:
+                        preps = [token for token in head.children if token.dep_ == "prep"]
+                        for prep in preps:
+                            orgs = [token for token in prep.children if token.ent_type_ == "ORG"]
+                            if len(orgs) > 0:
+                                return doc
+
+            if ent.label_ in ["ORG", "GPE", "LOC", "PERSON", "NORP", "FAC"]:
+                for token in doc:
+                    if token.lemma_.lower() in ["purchaser",
+                                                "buy", "purchase", "acquire"
+                        , "trade", "obtain", "get", "take", "sale"]:
+                        return doc
+        for i in range(len(token_list) - 1):
+            if token_list[i].ent_type_ in ["ORG", "NORP", "FAC", "GPE"]:
+                if token_list[i + 1].is_punct or token_list[i + 1].ent_type_ in ["ORG", "NORP", "FAC", "GPE"]:
                     return doc
+            token = token_list[i]
+            if token.dep == nsubj and token.head.pos == VERB and token.head.lemma_.lower() in ["purchaser", "buy",
+                                                                                               "purchase", "acquire"
+                , "trade", "obtain", "get",
+                                                                                               "take", "sale", "work",
+                                                                                               "employment", "run",
+                                                                                               "toil", "function",
+                                                                                               "operate",
+                                                                                               "perform", "run",
+                                                                                               "labor", "located",
+                                                                                               "situate",
+                                                                                               "locate", "part"]:
+                return doc
+
+        location_entities = [ent for ent in doc.ents if ent.label_.lower() in
+                             ["ORG", "NORP", "FAC", "GPE", "LOC"]]
+        if len(location_entities) > 2:
+            for ent in location_entities:
+                head = ent.root.head
+                if head.lemma_ in ["be", "situate", "place", "locate", "headquarter", "located",
+                                   "situate", "locate", "part", "lived", "live",
+                                   "headquarter"]:
+                    return doc
+
         return nlp.make_doc("")
 
 
     def preprocessing(doc):
-        # print(fc)
         token_list = []
         pos_list = []
         ner_list = []
         lemma_list = []
+
         for token in doc:
             token_list.append(token.text)
             pos_list.append(token.pos_)
             if token.pos_ == "VERB":
                 lemma_list.append(token.lemma_)
+
         for ent in doc.ents:
             ner_list.append(ent.label_)
         sentence_tokens[doc.text] = token_list
@@ -127,8 +141,32 @@ if __name__ == "__main__":
         return doc
 
 
-    nlp.add_pipe(preprocessing)
+    set_synset = set()
+    hyponym_set = set()
+    hypernym_set = set()
+
+
+    # predef_synset  = set()
+
+    # predef = nlp("work employment run employ toil function operate perform run labor buy purchase purchaser acquire trade obtain get take sale located situate locate part locate founder lived headquarter serve")
+    # for token in predef:
+    #   for synset in token._.wordnet.synsets():
+    #     predef_synset.add(synset)
+
+    def get_synonyms(doc):
+        for token in doc:
+            for synset in token._.wordnet.synsets():
+                set_synset.add(synset)
+                for hyponym in synset.hyponyms():
+                    hyponym_set.add(hyponym)
+                for hypernym in synset.hypernyms():
+                    hypernym_set.add(hypernym)
+        return doc
+
+
     nlp.add_pipe(extract_entities)
+    nlp.add_pipe(get_synonyms)
+    nlp.add_pipe(preprocessing)
     nlp.add_pipe(lemmatizer)
     nlp.add_pipe(remove_stopwords, name="stopwords", last=True)
 
@@ -141,8 +179,8 @@ if __name__ == "__main__":
             corpus.append(doc)
 
     # Build the bigram and trigram models
-    bigram = gensim.models.Phrases(corpus, min_count=5, threshold=100)  # higher threshold fewer phrases.
-    trigram = gensim.models.Phrases(bigram[corpus], threshold=100)
+    bigram = gensim.models.Phrases(corpus)  # higher threshold fewer phrases.
+    trigram = gensim.models.Phrases(bigram[corpus])
 
     # Faster way to get a sentence clubbed as a trigram/bigram
     bigram_mod = gensim.models.phrases.Phraser(bigram)
@@ -150,6 +188,11 @@ if __name__ == "__main__":
 
     # See trigram example
     print(trigram_mod[bigram_mod[corpus[0]]])
+
+    length = len(corpus)
+    triagram_corpus = []
+    for i in range(length):
+        triagram_corpus.append(trigram_mod[bigram_mod[corpus[i]]])
 
     #  Pinting lemma of  verbs in the corpus
     i = 0
@@ -179,13 +222,28 @@ if __name__ == "__main__":
             i += 1
             print(key, value)
 
-    # Creates, which is a mapping of word IDs to words.
-    words = corpora.Dictionary(corpus)
+    # creates a map of word and count
+    words = corpora.Dictionary(triagram_corpus)
     words.filter_extremes(no_below=5, no_above=0.8)
     # Turns each document into a bag of words.
-    filtered_corpus = [words.doc2bow(doc) for doc in corpus]
+    bow_corpus = [words.doc2bow(doc) for doc in triagram_corpus]
 
-    lda_model = gensim.models.ldamodel.LdaModel(corpus=filtered_corpus,
+    bow_doc_43 = bow_corpus[43]
+    for i in range(len(bow_doc_43)):
+        print("Word {} (\"{}\") appears {} time.".format(bow_doc_43[i][0],
+                                                         words[bow_doc_43[i][0]],
+                                                         bow_doc_43[i][1]))
+
+    from gensim import corpora, models
+
+    tfidf = models.TfidfModel(bow_corpus)
+    corpus_tfidf = tfidf[bow_corpus]
+    # from pprint import pprint
+    # for doc in corpus_tfidf:
+    #     pprint(doc)
+    #     break
+    #  Model using Bag Of Words.
+    lda_model = gensim.models.ldamodel.LdaModel(corpus=bow_corpus,
                                                 id2word=words,
                                                 num_topics=3,
                                                 random_state=3,
@@ -193,5 +251,27 @@ if __name__ == "__main__":
                                                 passes=100,
                                                 alpha='auto',
                                                 per_word_topics=True)
+    for idx, topic in lda_model.print_topics(-1):
+        print('Topic: {} \nWords: {}'.format(idx, topic))
 
-    pprint(lda_model.print_topics(num_words=10))
+    # Model using TFIDF
+    lda_model_tfidf = gensim.models.LdaMulticore(corpus_tfidf, num_topics=3, id2word=words, passes=2, workers=4)
+    for idx, topic in lda_model_tfidf.print_topics(-1):
+        print('Topic: {} Word: {}'.format(idx, topic))
+
+    test_files = []
+    for entry in os.listdir(test_data_folder):
+        if os.path.isfile(os.path.join(test_data_folder, entry)):
+            test_files.append(os.path.join(test_data_folder, entry))
+    corpus_test = u""
+    for file in test_files:
+        with codecs.open(file, "r", "utf-8") as text:
+            corpus_test += text.read()
+
+    test_corpus = []
+    test_sentences = nltk.sent_tokenize(corpus_test)
+    # corpus = list(nlp.pipe(sentences))
+    for sentence in test_sentences:
+        doc = nlp(sentence)
+        if doc:
+            test_corpus.append(doc)

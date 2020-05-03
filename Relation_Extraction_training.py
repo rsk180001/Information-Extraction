@@ -3,13 +3,12 @@ import sys
 import nltk
 import spacy
 from nltk.corpus import wordnet
-from itertools import chain
 from nltk.stem import WordNetLemmatizer
 nlp = spacy.load('en_core_web_sm')
 from nltk.corpus import stopwords
 import codecs
-#import gensim
-#from  gensim import corpora
+import gensim
+from  gensim import corpora
 from collections import defaultdict
 # from nltk import tree2conlltags
 # import numpy as np
@@ -127,7 +126,7 @@ def pos_tagging(token_dict):
         pos_tag_dict[key] = pos_tagged
     return pos_tag_dict
 
-
+#Lemmatize
 def lemmatization(pos_tag_dict):
     lemma_dict = {}
     lemmatizer = WordNetLemmatizer()
@@ -195,7 +194,6 @@ if __name__ == "__main__":
 
     token_dict, filtered_corpus = tokenization(corpus_raw)
     pos_tag_dict = pos_tagging(token_dict)
-    synonyms_dict, hypernyms_dict, hyponyms_dict = find_synonyms(pos_tag_dict)
     lemma_dict = lemmatization(pos_tag_dict)
     stem_dict = stemming(token_dict)
     parse_dict = chunking(pos_tag_dict)
